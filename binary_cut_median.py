@@ -8,6 +8,7 @@ import random
 import math
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from optproblems.cec2005 import *
 
 def qfunc(x):
 	return 0.5 - 0.5 * special.erf(x / sqrt(2))
@@ -31,15 +32,17 @@ def xsinx(x):
 
 # The dimention of the input vector
 dimen = 2
-# Objective function: The function accepts a vector, returns a real value
-# R^n -> R function
-obj_func = xsinx
+# choose a cec2005 problem
+cec_probs = F14(dimen)
+# Objective function: Any function that accepts a vector, returns a real value
+# or: Assign a R^n -> R function
+obj_func = lambda x: -cec_probs(x)  # cec2005 problems requires to be inverted
 # The bounds of the function
 bound = [ [-100, 100], [-100, 100] ]
 # Sample number
 N = 10000
 # The position of the optimal value
-opt_loc = [0, 0]
+opt_loc = cec_probs.get_optimal_solutions()[0].phenome  # use included opt position from cec2005
 
 # Asserts, check dimensions
 assert len(bound) == dimen
@@ -52,6 +55,9 @@ iterations = 0
 # Intermediate values, don't edit
 call_func = first_wrapper
 g_median = 0;
+
+# Print opt position
+print('optimal: ' + str(opt_loc))
 
 while True:
 	# Sample
@@ -117,9 +123,9 @@ while True:
 	param += np.log(P)
 	iterations += 1
 
-	print('(param, iter) = ' + str((param, iterations)))
+	print('[param, iter] = ' + str([param, iterations]))
 
-	command = input("Press p to plot, q to quite, enter to continue\n")
+	command = input("Press p to plot, q to quit, enter to continue\n")
 
 	if command == 'p':
 		fig = plt.figure()
