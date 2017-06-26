@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from numpy import sqrt, sin, cos, pi, median
 import numpy as np
 import scipy.integrate as integrate
@@ -9,111 +11,125 @@ from mpl_toolkits.mplot3d import Axes3D
 
 def qfunc(x):
 	return 0.5 - 0.5 * special.erf(x / sqrt(2))
-	
+
 def func_wrapper(x):
 	org = obj_func(x)
 	wrap = 0 if org < g_median else org - g_median
-	return (org, wrap)
+	return [org, wrap]
 
 def first_wrapper(x):
 	val = obj_func(x)
-	return (val, val)
+	return [val, val]
 
-def check_uni():
-	pre = sample[0][1]
-	pass_opt = False
-	for i in range(1, N):
-		if (pass_opt):
-			if (sample[i][1] >= pre):
-				return False
-		else:
-			if (sample[i][1] <= pre):
-				pass_opt = True
-		pre = sample[i][1]
-	return True
-
+def terminate():
+	# TODO!!!
+	return
 
 # Objective functions
 def xsinx(x):
-	return x * sin(x)
+	return x[0] * sin(x[0] + x[1])
 
-
-# Parameters
+# The dimention of the input vector
+dimen = 2
+# Objective function: The function accepts a vector, returns a real value
+# R^n -> R function
 obj_func = xsinx
-lower_bound = 0
-upper_bound = 50
+# The bounds of the function
+bound = [ [-100, 100], [-100, 100] ]
+# Sample number
 N = 10000
+# The position of the optimal value
+opt_loc = [0, 0]
 
-opt_loc = 45.575
+# Asserts, check dimensions
+assert len(bound) == dimen
+assert len(opt_loc) == dimen
 
-# Result
+# Results
 param = 0
 iterations = 0
 
-# First round call special wrapper
+# Intermediate values, don't edit
 call_func = first_wrapper
-idx = N
-# [0] = location; [1] = orignal value; [2] = wrapped value
-sample = np.empty((N, 3))
 g_median = 0;
 
 while True:
-	# Sample randomly
-	r = range(-idx, N) if idx < 0 else range(idx)
-	for i in r:
-		sample[i][0] = random.uniform(lower_bound, upper_bound)
-		v = call_func(sample[i][0])
-		sample[i][1] = v[0]
-		sample[i][2] = v[1]
+	# Sample
 
-	# Sort with value
-	sample.view('f8,f8,f8').sort(axis=0, order='f2')
+	# Data structure of sample:
+	# 0: position, vector with size == dimen
+	# 1: value of function in position, val[0] = raw value, used for terminate evaluation
+	#                                   val[1] = wrapped value, used for actual calculation
+	sample = []
+	for _ in range(N):
+		pos = []
+		# Random generate position
+		for i in range(dimen):
+			pos.append(random.uniform(bound[i][0], bound[i][1]))
+		sample.append([pos, call_func(pos)])
 
-	# Set the median parameter for next round
-	median = sample[int(N / 2)][2]
-	g_median += median
+	# Update call function
 	call_func = func_wrapper
 
-	# Adjust the sample points
-	for i in range(N):
-		sample[i][2] = 0 if sample[i][2] < median else sample[i][2] - median
-
-	# Sort with location
-	sample.view('f8,f8,f8').sort(axis=0, order='f0')
-
-	if (check_uni()):
+	# Check termination
+	if (terminate()):
 		break
 
-	iterations += 1
+	# Sort by wrapped value
+	sample.sort(key = lambda point : point[1][1])
 
-	# plt.scatter(sample[:, 0], sample[:, 1])
-	# plt.show()
+	# Get median and remove half
+	g_median = sample[int(N / 2)][1][1]
+	sample = sample[int(N / 2):]
+	for s in sample:
+		s[1][1] -= g_median
 
-	# Search index
-	middle = (lower_bound + upper_bound) / 2
-	idx = np.searchsorted(sample[:, 0], middle, side='right')
+	# Get variance of each axis
+	axis_var = []
+	for i in range(dimen):
+		axis_var.append(np.var([pos[0][i] for pos in sample]))
 
-	l_m = sample[:idx, 2].mean()
-	l_v = sample[:idx, 2].var(ddof=1)
-	r_m = sample[idx:, 2].mean()
-	r_v = sample[idx:, 2].var(ddof=1)
+	# Get the target axis
+	target_axix, val = max(enumerate(axis_var), key=lambda p: p[1])
+	axix_split = (bound[target_axix][0] + bound[target_axix][1]) / 2
+
+	left = []
+	right = []
+	for point in sample:
+		left.append(point[1][1]) if point[0][target_axix] < axix_split else right.append(point[1][1])
+
+	l_m = np.mean(left)
+	l_v = np.var(left, ddof=1)
+	r_m = np.mean(right)
+	r_v = np.var(right, ddof=1)
 
 	# random var X = N(l_m, l_v) - N(r_m, r_v) = N(l_m - r_m, l_v + r_v)
-
 	# Optimal on left: P(X > 0) = Q( -(l_m - r_m) / (l_v + r_v) )
 	# Optimal on right: P(X < 0) = 1 - P(X > 0)
 
 	P = qfunc( (r_m - l_m) / sqrt(l_v + r_v) )
-	if (opt_loc > middle):
+	if (opt_loc[target_axix] > axix_split):
 		P = 1 - P
-		lower_bound = middle
+		bound[target_axix][0] = axix_split
 	else:
-		upper_bound = middle
-		idx = -idx
+		bound[target_axix][1] = axix_split
 
 	param += np.log(P)
+	iterations += 1
+
+	print('(param, iter) = ' + str((param, iterations)))
+
+	command = input("Press p to plot, q to quite, enter to continue\n")
+
+	if command == 'p':
+		fig = plt.figure()
+		ax = fig.add_subplot(111, projection='3d')
+		X = [point[0][0] for point in sample]
+		Y = [point[0][1] for point in sample]
+		Z = [point[1][1] for point in sample]
+		ax.scatter(X, Y, Z, s=1)
+		plt.show()
+	elif command == 'q':
+		exit()
 
 
-print((iterations, param))
-
-	
